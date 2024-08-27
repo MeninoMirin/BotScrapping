@@ -1,31 +1,31 @@
+# main.py
 from selenium import webdriver
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from time import sleep
-import subprocess
-import platform
-import logging
 import json
 import gc
-
+import platform
+import logging
 
 logging.basicConfig(level=logging.INFO, filename='app.log', filemode='a', format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Main:
-
-    def carregar_valores(self):
+    def __init__(self):
+        self.driver = None
+        self.config = None
         self.ultimos = []
+        self.carregar_valores()
+    
+    def carregar_valores(self):
         with open('config.json') as configFile:
             config = json.load(configFile)
             self.quantidade_rodadas = config['quantidade_rodadas']
             self.mutiplicador_ausente = config['mutiplicador_ausente']
-            self.telegram.start(config['grupos'])
-        
+    
     def start(self):         
         system = platform.system()
         if system == "Windows":
@@ -39,7 +39,7 @@ class Main:
             subprocess.Popen(
                 f'/usr/bin/google-chrome --log-level=3 --remote-debugging-port=9222', shell=True)
         
-        service = Service()
+        service = Service(ChromeDriverManager().install())
         self.options = webdriver.ChromeOptions()
 
         self.options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
@@ -50,7 +50,6 @@ class Main:
         
         sleep(7)
         self.driver = webdriver.Chrome(service=service, options=self.options)
-        self.config = json.load(open('config.json'))
         self.driver.get('https://br.parimatch.com/')
         sleep(10)
         self.entrando_jogo()
@@ -75,10 +74,10 @@ class Main:
                 except: pass
             if len(ultimos): return ultimos
 
-    def buscar_alerta(self):
-        for numero in self.ultimos:
-            if numero >= self.mutiplicador_ausente: return False
-        return True
+    def processar(self):
+        if self.driver is None:
+            self.start()
+        return self.ultimos_resultados()
 
     def reset(self):
         if self.driver: self.driver.quit()
@@ -87,30 +86,6 @@ class Main:
         gc.collect()
         self.start()
 
-    def main(self):
-        self.carregar_valores()
-        self.start()
-        while True:
-            try:
-                ultimos = self.ultimos_resultados()
-
-                if self.ultimos[0:10] == ultimos[0:10]:
-                    continue
-
-                if self.ultimos == [] : self.ultimos = [ultimo for ultimo in ultimos]
-                else: self.ultimos.insert(0, ultimos[0])
-
-                while len(self.ultimos) > self.quantidade_rodadas:
-                    self.ultimos.pop()
-
-                if self.buscar_alerta():
-                    self.telegram.send_alert(self.quantidade_rodadas, self.mutiplicador_ausente)
-                    self.ultimos = self.ultimos[0]
-                               
-            except Exception as error:
-                logging.error(f"Erro: {error}", exc_info=True)
-                self.reset()
-
 if __name__ == '__main__':
     main = Main()
-    main.main()
+    main.start()
